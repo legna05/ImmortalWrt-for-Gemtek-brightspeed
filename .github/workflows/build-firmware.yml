@@ -87,7 +87,6 @@ jobs:
             ./staging_dir/tool*
 
       - name: Update Caches
-        if: env.WRT_TEST != 'true'
         run: |
           if [ -d "./staging_dir" ]; then
             find "./staging_dir" -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
