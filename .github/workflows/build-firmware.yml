@@ -67,20 +67,66 @@ jobs:
           esac
           echo "device_model=$device_model" >> $GITHUB_OUTPUT
           echo "Build version: ImmortalWrt-for-Gemtek-brightspeed $device_model $version_number"
+          
+          echo "WRT_HASH=$(git log -1 --pretty=format:'%h')" >> $GITHUB_ENV
 
       - name: Setup build environment
         run: |
           sudo apt update
           sudo apt install -y build-essential clang gcc g++ binutils bzip2 gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync unzip wget xsltproc zlib1g-dev file which perl sed make
 
-      - name: Install feeds
+      - name: Check Caches
+        id: check-cache
+        uses: actions/cache@main
+        with:
+          key: ${{inputs.config_seed}}-${{env.WRT_HASH}}
+          restore-keys: ${{inputs.config_seed}}
+          path: |
+            ./.ccache
+            ./staging_dir/host*
+            ./staging_dir/tool*
+
+      - name: Update Caches
+        if: env.WRT_TEST != 'true'
+        run: |
+          if [ -d "./staging_dir" ]; then
+            find "./staging_dir" -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
+              find "$DIR" -type f -exec touch {} +
+            done
+
+            mkdir -p ./tmp && echo "1" > ./tmp/.build
+
+            echo "toolchain skiped done!"
+          else
+            echo "caches missed!"
+          fi
+
+      - name: Diy Part 1
+        run: |
+          ./scripts_diy/diy_p1.sh
+
+      - name: Update feeds
         run: |
           ./scripts/feeds update -a
+
+      - name: Diy Part 2
+        run: |
+          ./scripts_diy/diy_p2.sh
+
+      - name: Install feeds
+        run: |
           ./scripts/feeds install -a
           bash scripts/fix-stale-golang-host.sh
 
       - name: Apply feed patches
         run: FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
+
+      - name: Diy Part 3
+        run: |
+          ./scripts_diy/diy_p3.sh
+          ./scripts_diy/Packages.sh
+          ./scripts_diy/Handles.sh
+          ./scripts_diy/Settings.sh
 
       - name: Configure
         run: |
@@ -91,6 +137,7 @@ jobs:
           UPSTREAM_COMMIT='${{ steps.version.outputs.upstream_commit }}' \
           VERSION_CODE='${{ steps.version.outputs.version_code }}' \
           bash scripts/set-build-version.sh .config
+          cat Repo/custom_config >> .config
           make defconfig
           bash scripts/check-gemtek-profile-isolation.sh --config .config
           grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
