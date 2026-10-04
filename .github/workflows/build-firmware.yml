@@ -102,6 +102,7 @@ jobs:
 
       - name: Diy Part 1
         run: |
+          chmod +x ./scripts_diy/*
           ./scripts_diy/diy_p1.sh
 
       - name: Update feeds
